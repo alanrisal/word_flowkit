@@ -10,7 +10,7 @@ module.exports = (env, argv) => {
     output: {
       path: path.resolve(__dirname, "docs"),
       filename: "taskpane.bundle.js",
-      publicPath: isProd ? "/Word_flowkit/" : "/",
+      publicPath: isProd ? "/word_flowkit/" : "/",
       clean: true,
     },
     resolve: {
