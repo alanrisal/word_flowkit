@@ -8,6 +8,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "taskpane.bundle.js",
+    publicPath: process.env.NODE_ENV === "production" ? "/Word_flowkit/" : "/",
     clean: true,
   },
   resolve: {

@@ -13,12 +13,12 @@
   <DisplayName DefaultValue="Debate Block Search"/>
   <Description DefaultValue="Semantic fuzzy search across debate files. Find and paste blocks directly into your document."/>
 
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon32.png"/>
-  <SupportUrl DefaultValue="https://localhost:3000"/>
+  <IconUrl DefaultValue="https://alanrisal.github.io/Word_flowkit/assets/icon32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://alanrisal.github.io/Word_flowkit/assets/icon32.png"/>
+  <SupportUrl DefaultValue="https://alanrisal.github.io/Word_flowkit"/>
 
   <AppDomains>
-    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>https://alanrisal.github.io</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -26,7 +26,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3000/index.html"/>
+    <SourceLocation DefaultValue="https://alanrisal.github.io/Word_flowkit/index.html"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -74,13 +74,13 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://localhost:3000/assets/icon32.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://localhost:3000/assets/icon32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://localhost:3000/assets/icon32.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://alanrisal.github.io/Word_flowkit/assets/icon32.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://alanrisal.github.io/Word_flowkit/assets/icon32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://alanrisal.github.io/Word_flowkit/assets/icon32.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://localhost:3000"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/index.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://alanrisal.github.io/Word_flowkit"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://alanrisal.github.io/Word_flowkit/index.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with Debate Block Search"/>
