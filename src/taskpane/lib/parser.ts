@@ -20,11 +20,54 @@ function generateId(): string {
 const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 /**
- * Extract all <w:p> nodes from document.xml as serialized XML strings.
- * Uses DOMParser so tag boundaries are always correct, then XMLSerializer
- * to produce a clean, self-contained string for each paragraph.
+ * Strip xmlns:* declarations that XMLSerializer adds to every serialized element.
+ * These are already declared on the OOXML wrapper, so leaving them on each <w:p>
+ * creates redundant re-declarations that Word's strict XML parser rejects.
  */
-async function extractParagraphXml(file: File): Promise<string[]> {
+function cleanSerializedParagraph(xml: string): string {
+  return xml.replace(/\s+xmlns(?::[A-Za-z0-9_.-]+)?="[^"]*"/g, "");
+}
+
+/**
+ * Detect heading level from a <w:p> DOM element.
+ * Using the DOM directly avoids regex failure if XMLSerializer renamed the w: prefix.
+ */
+function getHeadingLevelFromElement(el: Element): 1 | 2 | 3 | null {
+  const pStyleEls = el.getElementsByTagNameNS(W_NS, "pStyle");
+  if (!pStyleEls.length) return null;
+  const pStyle = pStyleEls[0];
+  // w:val may be an NS attribute or plain attribute depending on serializer
+  const val = (
+    pStyle.getAttributeNS(W_NS, "val") ??
+    pStyle.getAttribute("w:val") ??
+    ""
+  ).toLowerCase().replace(/\s/g, "");
+  if (val === "heading1") return 1;
+  if (val === "heading2") return 2;
+  if (val === "heading3") return 3;
+  return null;
+}
+
+/**
+ * Extract visible text from a <w:p> DOM element via <w:t> nodes.
+ */
+function extractTextFromElement(el: Element): string {
+  const tNodes = el.getElementsByTagNameNS(W_NS, "t");
+  return Array.from(tNodes)
+    .map(t => t.textContent ?? "")
+    .join("");
+}
+
+interface ParagraphEntry {
+  element: Element;
+  xml: string; // cleaned, xmlns-stripped serialization
+}
+
+/**
+ * Parse document.xml from a .docx zip, returning each direct <w:p> child of
+ * <w:body> as both a DOM Element (for querying) and a cleaned XML string (for storage).
+ */
+async function extractParagraphs(file: File): Promise<ParagraphEntry[]> {
   const arrayBuffer = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(arrayBuffer);
   const docFile = zip.file("word/document.xml");
@@ -47,80 +90,51 @@ async function extractParagraphXml(file: File): Promise<string[]> {
   }
 
   const serializer = new XMLSerializer();
-  const paragraphs: string[] = [];
+  const results: ParagraphEntry[] = [];
 
   for (const child of Array.from(bodyEl.childNodes)) {
     if (child.nodeType === Node.ELEMENT_NODE && (child as Element).localName === "p") {
-      paragraphs.push(serializer.serializeToString(child as Element));
+      const el = child as Element;
+      const raw = serializer.serializeToString(el);
+      results.push({ element: el, xml: cleanSerializedParagraph(raw) });
     }
   }
 
-  return paragraphs;
-}
-
-/**
- * Extract plain text from all <w:t> nodes in a <w:p> XML string.
- */
-function extractText(wpNode: string): string {
-  const textRe = /<w:t(?:[^>]*)>([\s\S]*?)<\/w:t>/g;
-  const parts: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = textRe.exec(wpNode)) !== null) {
-    parts.push(m[1]);
-  }
-  return parts.join("");
-}
-
-/**
- * Detect the heading level (1, 2, or 3) from a <w:p> node's style.
- * Returns null for body paragraphs.
- */
-function getHeadingLevel(wpNode: string): 1 | 2 | 3 | null {
-  // Match <w:pStyle w:val="Heading1"/> or "Heading 1" or "heading1" etc.
-  const styleMatch = wpNode.match(/<w:pStyle\s+w:val="([^"]+)"/i);
-  if (!styleMatch) return null;
-  const val = styleMatch[1].toLowerCase().replace(/\s/g, "");
-  if (val === "heading1") return 1;
-  if (val === "heading2") return 2;
-  if (val === "heading3") return 3;
-  return null;
+  return results;
 }
 
 export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
-  const paragraphXmls = await extractParagraphXml(file);
+  const paragraphs = await extractParagraphs(file);
 
   const blocks: DebateBlock[] = [];
 
-  // Current heading context for breadcrumbs
   let h1: string | null = null;
   let h2: string | null = null;
 
-  // Accumulator for the block currently being built
   let currentBlock: {
     headingLevel: 1 | 2 | 3;
     title: string;
     parentHeadings: string[];
-    paragraphs: string[];
+    xmlParts: string[];
     bodyParts: string[];
   } | null = null;
 
   const flushBlock = () => {
-    if (!currentBlock) return;
-    if (!currentBlock.title.trim()) return; // skip empty heading blocks
+    if (!currentBlock || !currentBlock.title.trim()) return;
     blocks.push({
       id: generateId(),
       sourceFile: file.name,
       headingLevel: currentBlock.headingLevel,
       title: currentBlock.title,
       bodyText: currentBlock.bodyParts.join(" ").trim(),
-      rawOoxml: currentBlock.paragraphs.join("\n"),
+      rawOoxml: currentBlock.xmlParts.join("\n"),
       parentHeadings: currentBlock.parentHeadings,
     });
   };
 
-  for (const pXml of paragraphXmls) {
-    const level = getHeadingLevel(pXml);
-    const text = extractText(pXml).trim();
+  for (const { element, xml } of paragraphs) {
+    const level = getHeadingLevelFromElement(element);
+    const text = extractTextFromElement(element).trim();
 
     if (level === 1) {
       flushBlock();
@@ -130,7 +144,7 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
         headingLevel: 1,
         title: text,
         parentHeadings: [],
-        paragraphs: [pXml],
+        xmlParts: [xml],
         bodyParts: [],
       };
     } else if (level === 2) {
@@ -140,7 +154,7 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
         headingLevel: 2,
         title: text,
         parentHeadings: h1 ? [h1] : [],
-        paragraphs: [pXml],
+        xmlParts: [xml],
         bodyParts: [],
       };
     } else if (level === 3) {
@@ -149,19 +163,17 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
         headingLevel: 3,
         title: text,
         parentHeadings: [h1, h2].filter((x): x is string => x !== null),
-        paragraphs: [pXml],
+        xmlParts: [xml],
         bodyParts: [],
       };
     } else {
-      // Body paragraph — append to current block if one is open
       if (currentBlock) {
-        currentBlock.paragraphs.push(pXml);
+        currentBlock.xmlParts.push(xml);
         if (text) currentBlock.bodyParts.push(text);
       }
     }
   }
 
-  // Flush the last block
   flushBlock();
 
   return blocks;
