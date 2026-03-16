@@ -18,11 +18,18 @@ export async function pasteBlockAtCursor(block: DebateBlock): Promise<void> {
     throw new Error(`Paste failed — malformed OOXML: ${check.error}`);
   }
 
-  console.debug("[FlowKit] OOXML valid, inserting block:", block.title);
+  console.log("[FlowKit] OOXML valid, inserting block:", block.title);
 
-  await Word.run(async (context) => {
-    const selection = context.document.getSelection();
-    selection.insertOoxml(ooxml, Word.InsertLocation.replace);
-    await context.sync();
-  });
+  try {
+    await Word.run(async (context) => {
+      const selection = context.document.getSelection();
+      selection.insertOoxml(ooxml, Word.InsertLocation.replace);
+      await context.sync();
+    });
+  } catch (wordErr) {
+    console.error("[FlowKit] Word.run failed for block:", block.title);
+    console.error("[FlowKit] Word error:", wordErr);
+    console.error("[FlowKit] rawOoxml that caused failure:", block.rawOoxml);
+    throw wordErr;
+  }
 }

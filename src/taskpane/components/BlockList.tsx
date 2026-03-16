@@ -30,6 +30,7 @@ export default function BlockList({ results, multiFile }: Props) {
       setPasteStatus(`Pasted: ${title}`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
+      console.error("[FlowKit] Paste failed for block:", result.block.title, e);
       setPasteStatus(`Error: ${msg}`);
     }
     pasteTimerRef.current = setTimeout(() => setPasteStatus(null), 2500);

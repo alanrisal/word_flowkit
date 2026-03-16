@@ -64,6 +64,25 @@ interface ParagraphEntry {
 }
 
 /**
+ * Unwrap <w:hyperlink> elements in a cloned <w:p>, keeping their inner <w:r> runs.
+ * Hyperlinks carry r:id relationship references that are only valid in the source
+ * document's .rels file. Sending them via insertOoxml() into a different document
+ * causes Word to fail with "problem with its contents" on the temp file.
+ */
+function stripHyperlinkWrappers(el: Element): Element {
+  const clone = el.cloneNode(true) as Element;
+  const hyperlinks = Array.from(clone.getElementsByTagNameNS(W_NS, "hyperlink"));
+  for (const link of hyperlinks) {
+    const parent = link.parentNode!;
+    while (link.firstChild) {
+      parent.insertBefore(link.firstChild, link);
+    }
+    parent.removeChild(link);
+  }
+  return clone;
+}
+
+/**
  * Parse document.xml from a .docx zip, returning each direct <w:p> child of
  * <w:body> as both a DOM Element (for querying) and a cleaned XML string (for storage).
  */
@@ -95,7 +114,8 @@ async function extractParagraphs(file: File): Promise<ParagraphEntry[]> {
   for (const child of Array.from(bodyEl.childNodes)) {
     if (child.nodeType === Node.ELEMENT_NODE && (child as Element).localName === "p") {
       const el = child as Element;
-      const raw = serializer.serializeToString(el);
+      const cleaned = stripHyperlinkWrappers(el);
+      const raw = serializer.serializeToString(cleaned);
       results.push({ element: el, xml: cleanSerializedParagraph(raw) });
     }
   }
