@@ -17,9 +17,12 @@ function generateId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
 /**
- * Extract all <w:p>...</w:p> nodes from document.xml as raw XML strings.
- * Uses a state-machine approach to handle nested tags correctly.
+ * Extract all <w:p> nodes from document.xml as serialized XML strings.
+ * Uses DOMParser so tag boundaries are always correct, then XMLSerializer
+ * to produce a clean, self-contained string for each paragraph.
  */
 async function extractParagraphXml(file: File): Promise<string[]> {
   const arrayBuffer = await file.arrayBuffer();
@@ -30,73 +33,26 @@ async function extractParagraphXml(file: File): Promise<string[]> {
   }
   const docXml = await docFile.async("string");
 
-  // Extract <w:p> nodes using a regex that handles nested elements
-  // We track depth to correctly pair opening and closing tags
+  const domParser = new DOMParser();
+  const xmlDoc = domParser.parseFromString(docXml, "application/xml");
+
+  const parseError = xmlDoc.querySelector("parsererror");
+  if (parseError) {
+    throw new Error(`Malformed document.xml in ${file.name}: ${parseError.textContent}`);
+  }
+
+  const bodyEl = xmlDoc.getElementsByTagNameNS(W_NS, "body")[0];
+  if (!bodyEl) {
+    throw new Error(`Could not find <w:body> in ${file.name}`);
+  }
+
+  const serializer = new XMLSerializer();
   const paragraphs: string[] = [];
-  let searchFrom = 0;
 
-  while (searchFrom < docXml.length) {
-    // Find the next opening <w:p> tag (with optional attributes or self-closing handled below)
-    const openMatch = docXml.indexOf("<w:p", searchFrom);
-    if (openMatch === -1) break;
-
-    // Peek at what follows the tag name — could be " ", ">", "/>"
-    const afterTag = docXml[openMatch + 4];
-    if (afterTag !== " " && afterTag !== ">" && afterTag !== "/") {
-      // e.g. <w:pPr> or <w:pStyle> — skip past this character
-      searchFrom = openMatch + 5;
-      continue;
+  for (const child of Array.from(bodyEl.childNodes)) {
+    if (child.nodeType === Node.ELEMENT_NODE && (child as Element).localName === "p") {
+      paragraphs.push(serializer.serializeToString(child as Element));
     }
-
-    // Check for self-closing <w:p ... />
-    const closeBracket = docXml.indexOf(">", openMatch);
-    if (closeBracket !== -1 && docXml[closeBracket - 1] === "/") {
-      paragraphs.push(docXml.slice(openMatch, closeBracket + 1));
-      searchFrom = closeBracket + 1;
-      continue;
-    }
-
-    // Walk forward counting open/close <w:p> tags to find our matching </w:p>
-    let depth = 0;
-    let pos = openMatch;
-    let endPos = -1;
-
-    while (pos < docXml.length) {
-      const nextOpen = docXml.indexOf("<w:p", pos);
-      const nextClose = docXml.indexOf("</w:p>", pos);
-
-      if (nextClose === -1) break; // malformed XML
-
-      if (nextOpen !== -1 && nextOpen < nextClose) {
-        // Check it's actually a <w:p tag (not <w:pPr etc.)
-        const ch = docXml[nextOpen + 4];
-        if (ch === " " || ch === ">" || ch === "/") {
-          // Is it self-closing?
-          const cb = docXml.indexOf(">", nextOpen);
-          if (cb !== -1 && docXml[cb - 1] === "/") {
-            pos = cb + 1;
-            continue;
-          }
-          depth++;
-          pos = nextOpen + 5;
-        } else {
-          pos = nextOpen + 5;
-        }
-      } else {
-        // nextClose comes first
-        depth--;
-        if (depth === 0) {
-          endPos = nextClose + 6; // length of "</w:p>"
-          break;
-        }
-        pos = nextClose + 6;
-      }
-    }
-
-    if (endPos === -1) break;
-
-    paragraphs.push(docXml.slice(openMatch, endPos));
-    searchFrom = endPos;
   }
 
   return paragraphs;
