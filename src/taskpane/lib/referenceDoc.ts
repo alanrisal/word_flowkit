@@ -39,6 +39,7 @@ export async function loadReferenceFile(file: File): Promise<{
   base64: string;
   blocks: BlockIndex[];
   styleNames: string[];
+  stylesJson: string; // full exportStylesFromJson output; "" if API unavailable
 }> {
   // Convert file to base64 — needed for createDocument() and style import
   const arrayBuffer = await file.arrayBuffer();
@@ -52,6 +53,7 @@ export async function loadReferenceFile(file: File): Promise<{
   // These are populated inside Word.run and read outside
   const blocks: BlockIndex[] = [];
   const styleNamesSet = new Set<string>();
+  let stylesJson = "";
 
   await Word.run(async (context) => {
     // PASS 1: Open document and load all paragraph text + styles
@@ -171,7 +173,22 @@ export async function loadReferenceFile(file: File): Promise<{
     for (const { block, result } of pairs) {
       block.cachedOoxml = result.value;
     }
+
+    // PASS 3: Export full style definitions for later import into the target doc.
+    // This is a separate sync so a failure here cannot corrupt the OOXML extraction above.
+    // exportStylesFromJson is runtime-only (not in @types/office-js) — cast to any.
+    try {
+      const stylesResult = (refDoc as any).exportStylesFromJson() as
+        OfficeExtension.ClientResult<string>;
+      await context.sync();
+      stylesJson = stylesResult.value ?? "";
+      console.log("[FlowKit] Exported style definitions JSON");
+    } catch (e) {
+      // API unavailable in this Word version — styleImporter will use the
+      // base64 slow path (exportStylesFromJson on demand) or addStyle fallback.
+      console.warn("[FlowKit] exportStylesFromJson unavailable at load time:", e);
+    }
   });
 
-  return { base64, blocks, styleNames: [...styleNamesSet] };
+  return { base64, blocks, styleNames: [...styleNamesSet], stylesJson };
 }

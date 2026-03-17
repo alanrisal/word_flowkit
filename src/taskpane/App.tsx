@@ -44,16 +44,21 @@ export default function App() {
     setIsLoading(true);
     setStatus(`Parsing ${file.name}...`);
     try {
-      // Step 1: Parse the file and extract OOXML for all blocks upfront.
+      // Step 1: Parse the file — extracts block OOXML and style definitions upfront.
       // createDocument() is called exactly once per file load here.
-      const { base64, blocks, styleNames } = await loadReferenceFile(file);
+      const { base64, blocks, styleNames, stylesJson } = await loadReferenceFile(file);
 
       // Step 2: Import any missing styles into the active document once.
-      // This never runs again at paste time.
-      await importStylesIntoActiveDocument(base64, styleNames);
+      // Fast path when stylesJson is available (no createDocument needed).
+      // Falls back to base64 re-open + addStyle() on older Word versions.
+      await importStylesIntoActiveDocument(
+        stylesJson ? { stylesJson } : { base64 },
+        styleNames
+      );
 
-      // Step 3: Store blocks (they carry cachedOoxml — no base64 needed later).
-      await fileStore.addFile(file, blocks);
+      // Step 3: Store blocks and style JSON (cachedOoxml and stylesJson
+      // both persist to IndexedDB so they survive session restarts).
+      await fileStore.addFile(file, blocks, stylesJson);
 
       const files = fileStore.getFileNames();
       setAllFiles(files);
