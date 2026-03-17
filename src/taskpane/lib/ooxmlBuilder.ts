@@ -32,29 +32,37 @@ export function sanitizeOoxml(rawOoxml: string, knownStyles: Set<string>): strin
   const paragraphs = Array.from(doc.documentElement.getElementsByTagNameNS(W_NS, "p"));
 
   for (const p of paragraphs) {
-    // Step 2 — remove revision/session tracking attributes
-    p.removeAttributeNS(W14_NS, "paraId");
-    p.removeAttributeNS(W14_NS, "textId");
-    p.removeAttributeNS(W_NS, "rsidR");
-    p.removeAttributeNS(W_NS, "rsidRPr");
-    p.removeAttributeNS(W_NS, "rsidRDefault");
-    p.removeAttributeNS(W_NS, "rsidP");
-    p.removeAttribute("w14:paraId");
-    p.removeAttribute("w14:textId");
-    p.removeAttribute("w:rsidR");
-    p.removeAttribute("w:rsidRPr");
-    p.removeAttribute("w:rsidRDefault");
-    p.removeAttribute("w:rsidP");
+    // Step 2 — remove revision/session tracking attributes from <w:p> AND all
+    // descendant elements (e.g. <w:r w:rsidRPr="...">). Word rejects these when
+    // they appear in an insertOoxml fragment from a different document session.
+    const allEls = [p, ...Array.from(p.getElementsByTagName("*"))];
+    for (const el of allEls) {
+      el.removeAttributeNS(W14_NS, "paraId");
+      el.removeAttributeNS(W14_NS, "textId");
+      el.removeAttributeNS(W_NS, "rsidR");
+      el.removeAttributeNS(W_NS, "rsidRPr");
+      el.removeAttributeNS(W_NS, "rsidRDefault");
+      el.removeAttributeNS(W_NS, "rsidP");
+      el.removeAttributeNS(W_NS, "rsidDel");
+      el.removeAttribute("w14:paraId");
+      el.removeAttribute("w14:textId");
+      el.removeAttribute("w:rsidR");
+      el.removeAttribute("w:rsidRPr");
+      el.removeAttribute("w:rsidRDefault");
+      el.removeAttribute("w:rsidP");
+      el.removeAttribute("w:rsidDel");
+    }
 
-    // Step 3 — remap unknown paragraph styles to Normal
+    // Step 3 — remap unknown paragraph styles to Normal.
+    // getAttributeNS is used to read (w:val is in the W namespace after DOM parsing).
+    // setAttribute with the qualified name is used to write — using both setAttributeNS
+    // AND setAttribute on the same attribute creates duplicate attributes in Edge's
+    // DOM serializer and produces malformed XML.
     const pStyleEls = p.getElementsByTagNameNS(W_NS, "pStyle");
     for (const pStyle of Array.from(pStyleEls)) {
-      const val =
-        pStyle.getAttributeNS(W_NS, "val") ??
-        pStyle.getAttribute("w:val") ??
-        "";
+      const val = pStyle.getAttributeNS(W_NS, "val") ?? pStyle.getAttribute("w:val") ?? "";
       if (!HEADING_RE.test(val) && !knownStyles.has(val)) {
-        pStyle.setAttributeNS(W_NS, "w:val", "Normal");
+        console.log(`[FlowKit] Remapping unknown style "${val}" → "Normal"`);
         pStyle.setAttribute("w:val", "Normal");
       }
     }
@@ -81,6 +89,7 @@ export function wrapOoxml(paragraphs: string): string {
   mc:Ignorable="w14 w15">
   <w:body>
     ${paragraphs}
+    <w:sectPr/>
   </w:body>
 </w:wordprocessingML>`;
 }

@@ -18,6 +18,8 @@ export async function pasteBlock(block: DebateBlock): Promise<void> {
     throw new Error("Block XML is malformed after sanitization — check console for details");
   }
 
+  console.log(`[FlowKit] Inserting block: "${block.title}" (${ooxml.length} chars)`);
+
   // 4 & 5. Insert at cursor, log and rethrow on failure
   try {
     await Word.run(async (context) => {
@@ -25,8 +27,10 @@ export async function pasteBlock(block: DebateBlock): Promise<void> {
       selection.insertOoxml(ooxml, Word.InsertLocation.replace);
       await context.sync();
     });
+    console.log(`[FlowKit] Paste succeeded: "${block.title}"`);
   } catch (err) {
     console.error(`[FlowKit] Paste failed for block: ${block.title}`, err);
+    console.error(`[FlowKit] Sanitized OOXML that was sent:`, ooxml);
     throw err;
   }
 }
