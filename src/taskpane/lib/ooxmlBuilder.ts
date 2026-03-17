@@ -68,6 +68,13 @@ export function sanitizeOoxml(rawOoxml: string, knownStyles: Set<string>): strin
     }
   }
 
+  // Step 3b — strip any <w:sectPr> elements carried over from the source document.
+  // sectPr defines document/section layout and is invalid inside an insertOoxml fragment.
+  const sectPrs = doc.getElementsByTagNameNS(W_NS, "sectPr");
+  for (const s of Array.from(sectPrs)) {
+    s.parentNode?.removeChild(s);
+  }
+
   // Step 4 — serialize and strip redundant xmlns from opening tags
   const serializer = new XMLSerializer();
   const cleaned = paragraphs
