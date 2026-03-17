@@ -176,17 +176,21 @@ export async function loadReferenceFile(file: File): Promise<{
 
     // PASS 3: Export full style definitions for later import into the target doc.
     // This is a separate sync so a failure here cannot corrupt the OOXML extraction above.
-    // exportStylesFromJson is runtime-only (not in @types/office-js) — cast to any.
-    try {
-      const stylesResult = (refDoc as any).exportStylesFromJson() as
-        OfficeExtension.ClientResult<string>;
-      await context.sync();
-      stylesJson = stylesResult.value ?? "";
-      console.log("[FlowKit] Exported style definitions JSON");
-    } catch (e) {
-      // API unavailable in this Word version — styleImporter will use the
-      // base64 slow path (exportStylesFromJson on demand) or addStyle fallback.
-      console.warn("[FlowKit] exportStylesFromJson unavailable at load time:", e);
+    // exportStylesFromJson is runtime-only (not in @types/office-js) — check existence
+    // before calling to avoid a noisy TypeError on Word versions that don't have it.
+    const refDocAny = refDoc as any;
+    if (typeof refDocAny.exportStylesFromJson === "function") {
+      try {
+        const stylesResult = refDocAny.exportStylesFromJson() as
+          OfficeExtension.ClientResult<string>;
+        await context.sync();
+        stylesJson = stylesResult.value ?? "";
+        console.log("[FlowKit] Exported style definitions JSON");
+      } catch (e) {
+        console.warn("[FlowKit] exportStylesFromJson call failed:", e);
+      }
+    } else {
+      console.log("[FlowKit] exportStylesFromJson not available on this Word version — styles will use fallback import");
     }
   });
 

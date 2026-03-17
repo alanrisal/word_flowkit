@@ -102,6 +102,7 @@ export default function App() {
         isLoading={isLoading}
         fileStore={fileStore}
       />
+      {isLoading && <div className="loading-bar" aria-label="Loading…" role="progressbar" />}
       {status && <div className="status-bar">{status}</div>}
       <SearchBar query={query} onChange={setQuery} />
       <BlockList results={results} multiFile={multiFile} />
