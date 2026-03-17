@@ -1,35 +1,32 @@
 import { DebateBlock } from "./parser";
-import { buildOoxmlDocument, validateOoxml } from "./ooxmlBuilder";
+import { sanitizeOoxml } from "./ooxmlBuilder";
+import { getDocumentStyles } from "./styleResolver";
 
 /* global Word */
 
-export async function pasteBlockAtCursor(block: DebateBlock): Promise<void> {
-  const ooxml = buildOoxmlDocument(block.rawOoxml);
+export async function pasteBlock(block: DebateBlock): Promise<void> {
+  // 1. Get styles present in the destination document
+  const knownStyles = await getDocumentStyles();
 
-  // Validate before sending to Word — gives a readable error instead of
-  // "contents have a problem" with a cryptic column number.
-  const check = validateOoxml(ooxml);
-  if (!check.valid) {
-    console.error("[FlowKit] OOXML failed validation before paste.");
-    console.error("[FlowKit] Parse error:", check.error);
-    // Log the raw paragraphs so you can inspect which block is broken
-    console.error("[FlowKit] rawOoxml for block:", block.title);
-    console.error("[FlowKit] rawOoxml content:", block.rawOoxml);
-    throw new Error(`Paste failed — malformed OOXML: ${check.error}`);
+  // 2. Sanitize: strip tracking attrs, remap unknown styles, wrap in OOXML document
+  const ooxml = sanitizeOoxml(block.rawOoxml, knownStyles);
+
+  // 3. Validate the final XML before handing it to Word
+  const check = new DOMParser().parseFromString(ooxml, "application/xml");
+  if (check.querySelector("parsererror")) {
+    console.error("[FlowKit] Invalid OOXML after sanitize:", ooxml);
+    throw new Error("Block XML is malformed after sanitization — check console for details");
   }
 
-  console.log("[FlowKit] OOXML valid, inserting block:", block.title);
-
+  // 4 & 5. Insert at cursor, log and rethrow on failure
   try {
     await Word.run(async (context) => {
       const selection = context.document.getSelection();
       selection.insertOoxml(ooxml, Word.InsertLocation.replace);
       await context.sync();
     });
-  } catch (wordErr) {
-    console.error("[FlowKit] Word.run failed for block:", block.title);
-    console.error("[FlowKit] Word error:", wordErr);
-    console.error("[FlowKit] rawOoxml that caused failure:", block.rawOoxml);
-    throw wordErr;
+  } catch (err) {
+    console.error(`[FlowKit] Paste failed for block: ${block.title}`, err);
+    throw err;
   }
 }

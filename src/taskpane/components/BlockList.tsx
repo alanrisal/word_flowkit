@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { RankedResult } from "../lib/searcher";
-import { pasteBlockAtCursor } from "../lib/paster";
+import { pasteBlock } from "../lib/paster";
 import BlockPreview from "./BlockPreview";
 
 interface Props {
@@ -23,7 +23,7 @@ export default function BlockList({ results, multiFile }: Props) {
     if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
     setPasteStatus("Pasting…");
     try {
-      await pasteBlockAtCursor(result.block);
+      await pasteBlock(result.block);
       const title = result.block.title.length > 50
         ? result.block.title.slice(0, 47) + "…"
         : result.block.title;

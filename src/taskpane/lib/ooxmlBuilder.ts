@@ -1,56 +1,86 @@
-/**
- * Validates an OOXML string by parsing it with DOMParser.
- * Returns { valid: true } or { valid: false, error: string }.
- * Call this before every insertOoxml() to get a readable error instead of
- * Word's cryptic "line 1 column N" message.
- */
-export function validateOoxml(ooxml: string): { valid: boolean; error?: string } {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(ooxml, "application/xml");
-  const err = doc.querySelector("parsererror");
-  if (err) {
-    return { valid: false, error: err.textContent ?? "Unknown XML parse error" };
-  }
-  return { valid: true };
+const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const W14_NS = "http://schemas.microsoft.com/office/word/2010/wordml";
+
+const HEADING_RE = /^heading\s*[1-6]$/i;
+
+// Wraps a serialized paragraph string, stripping xmlns declarations from its opening tag only.
+function cleanOpeningTag(xml: string): string {
+  // Match the opening <w:p ...> tag (up to the first > or end of self-close)
+  return xml.replace(/^(<w:p\b[^>]*>)/, (tag) =>
+    tag.replace(/\s+xmlns:[a-zA-Z0-9]+="[^"]*"/g, "")
+  );
 }
 
-/**
- * Wraps cleaned <w:p> paragraph strings in a complete OOXML document fragment
- * suitable for Word.Selection.insertOoxml().
- *
- * Namespace coverage:
- * - Core WordprocessingML namespaces (w, r, m, v, wp, w10)
- * - Office namespaces (o, mc)
- * - Word 2010 extension namespaces (w14, wp14, wpc, wpg, wpi, wps, wne)
- * - Word 2012–2018 extension namespaces (w15, w16cex, w16se)
- *
- * The paragraphs passed in must have their own xmlns:* declarations stripped
- * (see cleanSerializedParagraph in parser.ts) so there are no re-declaration conflicts.
- */
-export function buildOoxmlDocument(rawParagraphs: string): string {
+export function sanitizeOoxml(rawOoxml: string, knownStyles: Set<string>): string {
+  // Step 1 — parse inside a root element with all needed namespace declarations
+  const wrapped = `<root
+    xmlns:w="${W_NS}"
+    xmlns:w14="${W14_NS}"
+    xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
+    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  >${rawOoxml}</root>`;
+
+  const doc = new DOMParser().parseFromString(wrapped, "application/xml");
+  const parseErr = doc.querySelector("parsererror");
+  if (parseErr) {
+    console.error("[FlowKit] sanitizeOoxml: could not parse rawOoxml:", parseErr.textContent);
+    // Return rawOoxml as-is; paster.ts will catch the subsequent validation failure
+    return rawOoxml;
+  }
+
+  const paragraphs = Array.from(doc.documentElement.getElementsByTagNameNS(W_NS, "p"));
+
+  for (const p of paragraphs) {
+    // Step 2 — remove revision/session tracking attributes
+    p.removeAttributeNS(W14_NS, "paraId");
+    p.removeAttributeNS(W14_NS, "textId");
+    p.removeAttributeNS(W_NS, "rsidR");
+    p.removeAttributeNS(W_NS, "rsidRPr");
+    p.removeAttributeNS(W_NS, "rsidRDefault");
+    p.removeAttributeNS(W_NS, "rsidP");
+    p.removeAttribute("w14:paraId");
+    p.removeAttribute("w14:textId");
+    p.removeAttribute("w:rsidR");
+    p.removeAttribute("w:rsidRPr");
+    p.removeAttribute("w:rsidRDefault");
+    p.removeAttribute("w:rsidP");
+
+    // Step 3 — remap unknown paragraph styles to Normal
+    const pStyleEls = p.getElementsByTagNameNS(W_NS, "pStyle");
+    for (const pStyle of Array.from(pStyleEls)) {
+      const val =
+        pStyle.getAttributeNS(W_NS, "val") ??
+        pStyle.getAttribute("w:val") ??
+        "";
+      if (!HEADING_RE.test(val) && !knownStyles.has(val)) {
+        pStyle.setAttributeNS(W_NS, "w:val", "Normal");
+        pStyle.setAttribute("w:val", "Normal");
+      }
+    }
+  }
+
+  // Step 4 — serialize and strip redundant xmlns from opening tags
+  const serializer = new XMLSerializer();
+  const cleaned = paragraphs
+    .map((p) => cleanOpeningTag(serializer.serializeToString(p)))
+    .join("\n");
+
+  // Step 5 — wrap and return
+  return wrapOoxml(cleaned);
+}
+
+export function wrapOoxml(paragraphs: string): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:wordprocessingML
-  xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
-  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-  xmlns:o="urn:schemas-microsoft-com:office:office"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-  xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
-  xmlns:v="urn:schemas-microsoft-com:vml"
-  xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
-  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
-  xmlns:w10="urn:schemas-microsoft-com:office:word"
   xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
   xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
   xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
-  xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex"
-  xmlns:w16se="http://schemas.microsoft.com/office/word/2015/wordml/symex"
-  xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
-  xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk"
-  xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml"
-  xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
-  mc:Ignorable="w14 w15 w16cex w16se wp14">
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  mc:Ignorable="w14 w15">
   <w:body>
-    ${rawParagraphs}
+    ${paragraphs}
   </w:body>
 </w:wordprocessingML>`;
 }
