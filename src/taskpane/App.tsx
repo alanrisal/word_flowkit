@@ -5,7 +5,7 @@ import BlockList from "./components/BlockList";
 import MultiFileToggle from "./components/MultiFileToggle";
 import { FileStore } from "./lib/fileStore";
 import { loadReferenceFile } from "./lib/referenceDoc";
-import { importStylesIntoActiveDocument } from "./lib/styleImporter";
+import { pasteBlock } from "./lib/paster";
 import { searchBlocks, RankedResult } from "./lib/searcher";
 
 const fileStore = new FileStore();
@@ -40,25 +40,21 @@ export default function App() {
     setResults(ranked);
   }, [query, enabledFiles, multiFile]);
 
+  const handlePaste = useCallback(async (result: RankedResult) => {
+    const stylesXml = fileStore.getStylesXml(result.block.sourceFile);
+    await pasteBlock(result.block, stylesXml || undefined);
+  }, []);
+
   const handleFileLoaded = useCallback(async (file: File) => {
     setIsLoading(true);
     setStatus(`Parsing ${file.name}...`);
     try {
-      // Step 1: Parse the file — extracts block OOXML and style definitions upfront.
+      // Parse the file — extracts block OOXML and word/styles.xml upfront.
       // createDocument() is called exactly once per file load here.
-      const { base64, blocks, styleNames, stylesJson } = await loadReferenceFile(file);
+      const { blocks, stylesXml } = await loadReferenceFile(file);
 
-      // Step 2: Import any missing styles into the active document once.
-      // Fast path when stylesJson is available (no createDocument needed).
-      // Falls back to base64 re-open + addStyle() on older Word versions.
-      await importStylesIntoActiveDocument(
-        stylesJson ? { stylesJson } : { base64 },
-        styleNames
-      );
-
-      // Step 3: Store blocks and style JSON (cachedOoxml and stylesJson
-      // both persist to IndexedDB so they survive session restarts).
-      await fileStore.addFile(file, blocks, stylesJson);
+      // Store blocks and styles XML (both persist to IndexedDB across sessions).
+      await fileStore.addFile(file, blocks, stylesXml);
 
       const files = fileStore.getFileNames();
       setAllFiles(files);
@@ -105,7 +101,7 @@ export default function App() {
       {isLoading && <div className="loading-bar" aria-label="Loading…" role="progressbar" />}
       {status && <div className="status-bar">{status}</div>}
       <SearchBar query={query} onChange={setQuery} />
-      <BlockList results={results} multiFile={multiFile} />
+      <BlockList results={results} multiFile={multiFile} onPaste={handlePaste} />
     </div>
   );
 }

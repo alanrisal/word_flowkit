@@ -1,14 +1,14 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { RankedResult } from "../lib/searcher";
-import { pasteBlock } from "../lib/paster";
 import BlockPreview from "./BlockPreview";
 
 interface Props {
   results: RankedResult[];
   multiFile: boolean;
+  onPaste: (result: RankedResult) => Promise<void>;
 }
 
-export default function BlockList({ results, multiFile }: Props) {
+export default function BlockList({ results, multiFile, onPaste }: Props) {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pasteStatus, setPasteStatus] = useState<string | null>(null);
@@ -23,7 +23,7 @@ export default function BlockList({ results, multiFile }: Props) {
     if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
     setPasteStatus("Pasting…");
     try {
-      await pasteBlock(result.block);
+      await onPaste(result);
       const title = result.block.title.length > 50
         ? result.block.title.slice(0, 47) + "…"
         : result.block.title;

@@ -4,7 +4,7 @@ import { BlockIndex } from "./referenceDoc";
 interface FileRecord {
   name: string;
   blocks: BlockIndex[];
-  stylesJson: string; // exportStylesFromJson output; "" if unavailable at load time
+  stylesXml: string; // raw word/styles.xml extracted from the .docx zip
 }
 
 interface DebateAddinDB extends DBSchema {
@@ -15,13 +15,13 @@ interface DebateAddinDB extends DBSchema {
 }
 
 const DB_NAME = "debate-addin";
-const DB_VERSION = 4; // bumped: FileRecord now includes stylesJson
+const DB_VERSION = 5; // bumped: stylesJson renamed to stylesXml
 const STORE_NAME = "files";
 
 export class FileStore {
   private db: IDBPDatabase<DebateAddinDB> | null = null;
   private loadedFiles: Map<string, BlockIndex[]> = new Map();
-  private stylesJsonMap: Map<string, string> = new Map();
+  private stylesXmlMap: Map<string, string> = new Map();
 
   async init(): Promise<void> {
     this.db = await openDB<DebateAddinDB>(DB_NAME, DB_VERSION, {
@@ -37,26 +37,26 @@ export class FileStore {
     const records = await this.db.getAll(STORE_NAME);
     for (const record of records) {
       this.loadedFiles.set(record.name, record.blocks);
-      this.stylesJsonMap.set(record.name, record.stylesJson ?? "");
+      this.stylesXmlMap.set(record.name, record.stylesXml ?? "");
     }
   }
 
   /**
-   * Store pre-built blocks and style definitions for a file.
-   * All heavy lifting (parsing, OOXML extraction, style export) is done
-   * by the caller via loadReferenceFile() before this point.
+   * Store pre-built blocks and raw styles XML for a file.
+   * All heavy lifting (parsing, OOXML extraction) is done by the caller
+   * via loadReferenceFile() before this point.
    */
-  async addFile(file: File, blocks: BlockIndex[], stylesJson: string): Promise<void> {
+  async addFile(file: File, blocks: BlockIndex[], stylesXml: string): Promise<void> {
     this.loadedFiles.set(file.name, blocks);
-    this.stylesJsonMap.set(file.name, stylesJson);
+    this.stylesXmlMap.set(file.name, stylesXml);
     if (this.db) {
-      await this.db.put(STORE_NAME, { name: file.name, blocks, stylesJson });
+      await this.db.put(STORE_NAME, { name: file.name, blocks, stylesXml });
     }
   }
 
   removeFile(name: string): void {
     this.loadedFiles.delete(name);
-    this.stylesJsonMap.delete(name);
+    this.stylesXmlMap.delete(name);
     if (this.db) {
       this.db.delete(STORE_NAME, name).catch(console.error);
     }
@@ -75,8 +75,8 @@ export class FileStore {
     return files.flatMap(name => this.loadedFiles.get(name) ?? []);
   }
 
-  /** Returns the cached exportStylesFromJson output, or "" if unavailable. */
-  getStylesJson(name: string): string {
-    return this.stylesJsonMap.get(name) ?? "";
+  /** Returns the cached word/styles.xml content, or "" if unavailable. */
+  getStylesXml(name: string): string {
+    return this.stylesXmlMap.get(name) ?? "";
   }
 }
