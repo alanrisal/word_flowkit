@@ -79,4 +79,36 @@ export class FileStore {
   getStylesXml(name: string): string {
     return this.stylesXmlMap.get(name) ?? "";
   }
+
+  /** Serialize all loaded files to a JSON string for download/backup. */
+  exportToJson(): string {
+    const files = [...this.loadedFiles.entries()].map(([name, blocks]) => ({
+      name,
+      blocks,
+      stylesXml: this.stylesXmlMap.get(name) ?? "",
+    }));
+    return JSON.stringify({ version: 1, files });
+  }
+
+  /** Load files from a previously exported JSON string. Returns imported file names. */
+  async importFromJson(jsonText: string): Promise<string[]> {
+    const data = JSON.parse(jsonText) as {
+      version: number;
+      files: Array<{ name: string; blocks: BlockIndex[]; stylesXml: string }>;
+    };
+    const imported: string[] = [];
+    for (const record of data.files) {
+      this.loadedFiles.set(record.name, record.blocks);
+      this.stylesXmlMap.set(record.name, record.stylesXml ?? "");
+      if (this.db) {
+        await this.db.put(STORE_NAME, {
+          name: record.name,
+          blocks: record.blocks,
+          stylesXml: record.stylesXml ?? "",
+        });
+      }
+      imported.push(record.name);
+    }
+    return imported;
+  }
 }

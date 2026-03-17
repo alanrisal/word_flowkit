@@ -47,11 +47,6 @@ export default function BlockList({ results, multiFile, onPaste }: Props) {
         e.preventDefault();
         setSelectedIdx(i => Math.max(i - 1, 0));
       } else if (e.key === "Enter") {
-        // Don't paste if focus is inside the search input
-        const active = document.activeElement;
-        if (active && active.tagName === "INPUT" && (active as HTMLInputElement).type === "text") {
-          return;
-        }
         e.preventDefault();
         handlePaste(results[selectedIdx]);
       }

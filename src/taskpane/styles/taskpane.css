@@ -1,6 +1,6 @@
 /* ============================================================
-   Debate Block Search — Task Pane Styles
-   Dark professional theme, accent #4a9eff
+   FlowKit — Task Pane Styles
+   Dark technical theme, white-glow accent
    Optimized for narrow sidebar (~320px)
    ============================================================ */
 
@@ -11,26 +11,26 @@
 }
 
 :root {
-  --bg-primary:    #1a1d23;
-  --bg-secondary:  #23272e;
-  --bg-tertiary:   #2c313a;
-  --bg-hover:      #313743;
-  --bg-selected:   #1e3a5f;
+  --bg-primary:    #151719;
+  --bg-secondary:  #1d2024;
+  --bg-tertiary:   #252a2f;
+  --bg-hover:      #2a2f35;
+  --bg-selected:   #1d2024;
 
-  --text-primary:  #e8eaf0;
-  --text-secondary:#9aa0ad;
-  --text-muted:    #636a78;
+  --text-primary:  #dde3e8;
+  --text-secondary:#7e8a96;
+  --text-muted:    #4e5762;
 
-  --accent:        #4a9eff;
-  --accent-hover:  #6ab4ff;
-  --accent-dim:    #1e3a5f;
+  --accent:        #b8cad6;
+  --accent-hover:  #dce8ef;
+  --accent-dim:    #1d2428;
 
-  --danger:        #e05555;
-  --success:       #4caf7d;
-  --warning:       #e0a950;
+  --danger:        #c95f5f;
+  --success:       #4a9e72;
+  --warning:       #c99040;
 
-  --border:        #30353f;
-  --border-light:  #3d4452;
+  --border:        #282d32;
+  --border-light:  #343b42;
 
   --radius-sm:     4px;
   --radius-md:     6px;
@@ -206,25 +206,50 @@ body {
 }
 
 .load-btn {
-  background: var(--accent-dim);
-  color: var(--accent);
-  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   padding: 4px 10px;
   font-size: 12px;
   font-family: var(--font);
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
   white-space: nowrap;
 }
 
 .load-btn:hover:not(:disabled) {
-  background: var(--accent);
-  color: #fff;
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .load-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
@@ -339,8 +364,8 @@ body {
 }
 
 .search-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+  border-color: rgba(184, 202, 214, 0.4);
+  box-shadow: 0 0 0 2px rgba(184, 202, 214, 0.08);
 }
 
 /* ============================================================
@@ -397,7 +422,8 @@ body {
 
 .block-item.selected {
   background: var(--bg-selected);
-  border-color: var(--accent);
+  border-color: rgba(184, 202, 214, 0.35);
+  box-shadow: 0 0 0 1px rgba(184, 202, 214, 0.08) inset;
 }
 
 .block-item-header {

@@ -82,6 +82,36 @@ export default function App() {
     );
   }, []);
 
+  const handleExport = useCallback(() => {
+    const json = fileStore.exportToJson();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "flowkit-blocks.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleImportJson = useCallback(async (file: File) => {
+    setIsLoading(true);
+    setStatus(`Importing ${file.name}...`);
+    try {
+      const text = await file.text();
+      const imported = await fileStore.importFromJson(text);
+      const files = fileStore.getFileNames();
+      setAllFiles(files);
+      setEnabledFiles(files);
+      setStatus(`Imported ${imported.length} file(s) from JSON`);
+      setTimeout(() => setStatus(null), 3000);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus(`Import error: ${msg}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -95,6 +125,8 @@ export default function App() {
         onFileLoaded={handleFileLoaded}
         onFileRemoved={handleFileRemoved}
         onToggleFile={handleToggleFile}
+        onExport={handleExport}
+        onImportJson={handleImportJson}
         isLoading={isLoading}
         fileStore={fileStore}
       />
