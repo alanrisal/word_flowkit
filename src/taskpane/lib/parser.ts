@@ -112,8 +112,12 @@ async function extractParagraphs(file: File): Promise<ParagraphEntry[]> {
   const results: ParagraphEntry[] = [];
 
   for (const child of Array.from(bodyEl.childNodes)) {
-    if (child.nodeType === Node.ELEMENT_NODE && (child as Element).localName === "p") {
+    if (child.nodeType === Node.ELEMENT_NODE) {
       const el = child as Element;
+      if (el.localName !== "p") {
+        console.log(`[FlowKit] Skipping non-paragraph body element: <w:${el.localName}>`);
+        continue;
+      }
       const cleaned = stripHyperlinkWrappers(el);
       const raw = serializer.serializeToString(cleaned);
       results.push({ element: el, xml: cleanSerializedParagraph(raw) });
