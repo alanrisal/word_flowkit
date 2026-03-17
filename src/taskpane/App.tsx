@@ -4,6 +4,8 @@ import FileManager from "./components/FileManager";
 import BlockList from "./components/BlockList";
 import MultiFileToggle from "./components/MultiFileToggle";
 import { FileStore } from "./lib/fileStore";
+import { loadReferenceFile } from "./lib/referenceDoc";
+import { importStylesIntoActiveDocument } from "./lib/styleImporter";
 import { searchBlocks, RankedResult } from "./lib/searcher";
 
 const fileStore = new FileStore();
@@ -42,7 +44,17 @@ export default function App() {
     setIsLoading(true);
     setStatus(`Parsing ${file.name}...`);
     try {
-      await fileStore.addFile(file);
+      // Step 1: Parse the file and extract OOXML for all blocks upfront.
+      // createDocument() is called exactly once per file load here.
+      const { base64, blocks, styleNames } = await loadReferenceFile(file);
+
+      // Step 2: Import any missing styles into the active document once.
+      // This never runs again at paste time.
+      await importStylesIntoActiveDocument(base64, styleNames);
+
+      // Step 3: Store blocks (they carry cachedOoxml — no base64 needed later).
+      await fileStore.addFile(file, blocks);
+
       const files = fileStore.getFileNames();
       setAllFiles(files);
       setEnabledFiles(files);
@@ -69,10 +81,6 @@ export default function App() {
     );
   }, []);
 
-  const getBase64 = useCallback((filename: string) => {
-    return fileStore.getBase64(filename);
-  }, []);
-
   return (
     <div className="app">
       <header className="app-header">
@@ -91,7 +99,7 @@ export default function App() {
       />
       {status && <div className="status-bar">{status}</div>}
       <SearchBar query={query} onChange={setQuery} />
-      <BlockList results={results} multiFile={multiFile} getBase64={getBase64} />
+      <BlockList results={results} multiFile={multiFile} />
     </div>
   );
 }

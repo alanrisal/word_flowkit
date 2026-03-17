@@ -6,10 +6,9 @@ import BlockPreview from "./BlockPreview";
 interface Props {
   results: RankedResult[];
   multiFile: boolean;
-  getBase64: (filename: string) => string | null;
 }
 
-export default function BlockList({ results, multiFile, getBase64 }: Props) {
+export default function BlockList({ results, multiFile }: Props) {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pasteStatus, setPasteStatus] = useState<string | null>(null);
@@ -24,11 +23,7 @@ export default function BlockList({ results, multiFile, getBase64 }: Props) {
     if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
     setPasteStatus("Pasting…");
     try {
-      const base64 = getBase64(result.block.sourceFile);
-      if (!base64) {
-        throw new Error(`No file data found for "${result.block.sourceFile}" — try reloading it`);
-      }
-      await pasteBlock({ block: result.block, base64 });
+      await pasteBlock(result.block);
       const title = result.block.title.length > 50
         ? result.block.title.slice(0, 47) + "…"
         : result.block.title;
@@ -39,7 +34,7 @@ export default function BlockList({ results, multiFile, getBase64 }: Props) {
       setPasteStatus(`Error: ${msg}`);
     }
     pasteTimerRef.current = setTimeout(() => setPasteStatus(null), 2500);
-  }, [getBase64]);
+  }, []);
 
   // Arrow key navigation + Enter to paste
   useEffect(() => {
