@@ -69,6 +69,10 @@ export default function App() {
     );
   }, []);
 
+  const getBase64 = useCallback((filename: string) => {
+    return fileStore.getBase64(filename);
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -87,7 +91,7 @@ export default function App() {
       />
       {status && <div className="status-bar">{status}</div>}
       <SearchBar query={query} onChange={setQuery} />
-      <BlockList results={results} multiFile={multiFile} />
+      <BlockList results={results} multiFile={multiFile} getBase64={getBase64} />
     </div>
   );
 }

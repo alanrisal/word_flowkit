@@ -6,8 +6,9 @@ export interface DebateBlock {
   headingLevel: 1 | 2 | 3;
   title: string;
   bodyText: string;
-  rawOoxml: string;
   parentHeadings: string[];
+  paragraphStart: number; // 0-indexed position among <w:p> children of <w:body>
+  paragraphEnd: number;   // inclusive
 }
 
 function generateId(): string {
@@ -19,24 +20,10 @@ function generateId(): string {
 
 const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-/**
- * Strip xmlns:* declarations that XMLSerializer adds to every serialized element.
- * These are already declared on the OOXML wrapper, so leaving them on each <w:p>
- * creates redundant re-declarations that Word's strict XML parser rejects.
- */
-function cleanSerializedParagraph(xml: string): string {
-  return xml.replace(/\s+xmlns(?::[A-Za-z0-9_.-]+)?="[^"]*"/g, "");
-}
-
-/**
- * Detect heading level from a <w:p> DOM element.
- * Using the DOM directly avoids regex failure if XMLSerializer renamed the w: prefix.
- */
 function getHeadingLevelFromElement(el: Element): 1 | 2 | 3 | null {
   const pStyleEls = el.getElementsByTagNameNS(W_NS, "pStyle");
   if (!pStyleEls.length) return null;
   const pStyle = pStyleEls[0];
-  // w:val may be an NS attribute or plain attribute depending on serializer
   const val = (
     pStyle.getAttributeNS(W_NS, "val") ??
     pStyle.getAttribute("w:val") ??
@@ -48,9 +35,6 @@ function getHeadingLevelFromElement(el: Element): 1 | 2 | 3 | null {
   return null;
 }
 
-/**
- * Extract visible text from a <w:p> DOM element via <w:t> nodes.
- */
 function extractTextFromElement(el: Element): string {
   const tNodes = el.getElementsByTagNameNS(W_NS, "t");
   return Array.from(tNodes)
@@ -58,35 +42,13 @@ function extractTextFromElement(el: Element): string {
     .join("");
 }
 
-interface ParagraphEntry {
-  element: Element;
-  xml: string; // cleaned, xmlns-stripped serialization
-}
-
 /**
- * Unwrap <w:hyperlink> elements in a cloned <w:p>, keeping their inner <w:r> runs.
- * Hyperlinks carry r:id relationship references that are only valid in the source
- * document's .rels file. Sending them via insertOoxml() into a different document
- * causes Word to fail with "problem with its contents" on the temp file.
+ * Extract only the direct <w:p> children of <w:body>, 0-indexed.
+ * This mirrors how Word.js body.paragraphs.items is indexed, so
+ * paragraphStart/paragraphEnd values can be used interchangeably
+ * in paster.ts when re-opening the same document via createDocument().
  */
-function stripHyperlinkWrappers(el: Element): Element {
-  const clone = el.cloneNode(true) as Element;
-  const hyperlinks = Array.from(clone.getElementsByTagNameNS(W_NS, "hyperlink"));
-  for (const link of hyperlinks) {
-    const parent = link.parentNode!;
-    while (link.firstChild) {
-      parent.insertBefore(link.firstChild, link);
-    }
-    parent.removeChild(link);
-  }
-  return clone;
-}
-
-/**
- * Parse document.xml from a .docx zip, returning each direct <w:p> child of
- * <w:body> as both a DOM Element (for querying) and a cleaned XML string (for storage).
- */
-async function extractParagraphs(file: File): Promise<ParagraphEntry[]> {
+async function extractParagraphElements(file: File): Promise<Element[]> {
   const arrayBuffer = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(arrayBuffer);
   const docFile = zip.file("word/document.xml");
@@ -108,28 +70,17 @@ async function extractParagraphs(file: File): Promise<ParagraphEntry[]> {
     throw new Error(`Could not find <w:body> in ${file.name}`);
   }
 
-  const serializer = new XMLSerializer();
-  const results: ParagraphEntry[] = [];
-
+  const results: Element[] = [];
   for (const child of Array.from(bodyEl.childNodes)) {
-    if (child.nodeType === Node.ELEMENT_NODE) {
-      const el = child as Element;
-      if (el.localName !== "p") {
-        console.log(`[FlowKit] Skipping non-paragraph body element: <w:${el.localName}>`);
-        continue;
-      }
-      const cleaned = stripHyperlinkWrappers(el);
-      const raw = serializer.serializeToString(cleaned);
-      results.push({ element: el, xml: cleanSerializedParagraph(raw) });
+    if (child.nodeType === Node.ELEMENT_NODE && (child as Element).localName === "p") {
+      results.push(child as Element);
     }
   }
-
   return results;
 }
 
 export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
-  const paragraphs = await extractParagraphs(file);
-
+  const elements = await extractParagraphElements(file);
   const blocks: DebateBlock[] = [];
 
   let h1: string | null = null;
@@ -139,8 +90,9 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
     headingLevel: 1 | 2 | 3;
     title: string;
     parentHeadings: string[];
-    xmlParts: string[];
     bodyParts: string[];
+    paragraphStart: number;
+    paragraphEnd: number;
   } | null = null;
 
   const flushBlock = () => {
@@ -151,14 +103,17 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
       headingLevel: currentBlock.headingLevel,
       title: currentBlock.title,
       bodyText: currentBlock.bodyParts.join(" ").trim(),
-      rawOoxml: currentBlock.xmlParts.join("\n"),
       parentHeadings: currentBlock.parentHeadings,
+      paragraphStart: currentBlock.paragraphStart,
+      paragraphEnd: currentBlock.paragraphEnd,
     });
+    currentBlock = null;
   };
 
-  for (const { element, xml } of paragraphs) {
-    const level = getHeadingLevelFromElement(element);
-    const text = extractTextFromElement(element).trim();
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+    const level = getHeadingLevelFromElement(el);
+    const text = extractTextFromElement(el).trim();
 
     if (level === 1) {
       flushBlock();
@@ -168,8 +123,9 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
         headingLevel: 1,
         title: text,
         parentHeadings: [],
-        xmlParts: [xml],
         bodyParts: [],
+        paragraphStart: i,
+        paragraphEnd: i,
       };
     } else if (level === 2) {
       flushBlock();
@@ -178,8 +134,9 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
         headingLevel: 2,
         title: text,
         parentHeadings: h1 ? [h1] : [],
-        xmlParts: [xml],
         bodyParts: [],
+        paragraphStart: i,
+        paragraphEnd: i,
       };
     } else if (level === 3) {
       flushBlock();
@@ -187,18 +144,18 @@ export async function parseDebateFile(file: File): Promise<DebateBlock[]> {
         headingLevel: 3,
         title: text,
         parentHeadings: [h1, h2].filter((x): x is string => x !== null),
-        xmlParts: [xml],
         bodyParts: [],
+        paragraphStart: i,
+        paragraphEnd: i,
       };
     } else {
       if (currentBlock) {
-        currentBlock.xmlParts.push(xml);
+        currentBlock.paragraphEnd = i;
         if (text) currentBlock.bodyParts.push(text);
       }
     }
   }
 
   flushBlock();
-
   return blocks;
 }
