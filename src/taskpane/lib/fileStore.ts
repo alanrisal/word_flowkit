@@ -50,7 +50,16 @@ export class FileStore {
     this.loadedFiles.set(file.name, blocks);
     this.stylesXmlMap.set(file.name, stylesXml);
     if (this.db) {
-      await this.db.put(STORE_NAME, { name: file.name, blocks, stylesXml });
+      try {
+        await this.db.put(STORE_NAME, { name: file.name, blocks, stylesXml });
+      } catch (e: unknown) {
+        if (e instanceof Error && e.name === "QuotaExceededError") {
+          throw new Error(
+            `Storage quota exceeded — try removing unused files first. (${file.name})`
+          );
+        }
+        throw e;
+      }
     }
   }
 

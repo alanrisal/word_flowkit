@@ -52,11 +52,13 @@ export async function loadReferenceFile(file: File): Promise<{
     console.warn("[FlowKit] Could not extract word/styles.xml:", e);
   }
 
-  // Convert to base64 for createDocument()
+  // Convert to base64 for createDocument().
+  // Chunked approach avoids call-stack overflow in WKWebView (Mac) with large files.
   const bytes = new Uint8Array(arrayBuffer);
   let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...(bytes.subarray(i, i + CHUNK) as unknown as number[]));
   }
   const base64 = btoa(binary);
 

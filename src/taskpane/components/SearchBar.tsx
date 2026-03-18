@@ -45,7 +45,7 @@ export default function SearchBar({ query, onChange }: Props) {
         type="text"
         defaultValue={query}
         onChange={handleChange}
-        placeholder="Search blocks… (Ctrl+Shift+F)"
+        placeholder={`Search blocks… (${/Mac/i.test(navigator.platform) ? "Cmd" : "Ctrl"}+Shift+F)`}
         className="search-input"
         autoFocus
         aria-label="Search debate blocks"

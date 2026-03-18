@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(find /c/Users/alanr/Documents/Word_flowkit -maxdepth 2 -name .env* -o -name *.bat -o -name *.cmd -o -name .npmrc)"
     ]
   }
 }
